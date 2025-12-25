@@ -1,169 +1,413 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>TTS Chat Room</title>
+import React, { useState, useEffect, useRef } from 'react';
+import { Volume2, Send, Settings, Image, Video, Code, Smile, Copy, Check, Loader } from 'lucide-react';
 
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #0f0f0f;
-      color: white;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCdlefibbnAvbdZ86lPJAdUtifGPP7uQTE",
+  authDomain: "tts-projet-fd867.firebaseapp.com",
+  databaseURL: "https://tts-projet-fd867-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "tts-projet-fd867",
+  storageBucket: "tts-projet-fd867.firebasestorage.app",
+  messagingSenderId: "412421975876",
+  appId: "1:412421975876:web:bae419fa68b429ba52f111"
+};
+
+export default function TTSChatApp() {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [username, setUsername] = useState('');
+  const [isUsernameSet, setIsUsernameSet] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [selectedVoice, setSelectedVoice] = useState('');
+  const [voices, setVoices] = useState([]);
+  const [speed, setSpeed] = useState(1);
+  const [pitch, setPitch] = useState(1);
+  const [volume, setVolume] = useState(1);
+  const [copiedId, setCopiedId] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState(null);
+  const [mediaType, setMediaType] = useState(null);
+  const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const speechQueue = useRef([]);
+  const isSpeaking = useRef(false);
+  const dbRef = useRef(null);
+
+  // Initialize Firebase
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js';
+    script.onload = () => {
+      const dbScript = document.createElement('script');
+      dbScript.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js';
+      dbScript.onload = () => {
+        firebase.initializeApp(firebaseConfig);
+        dbRef.current = firebase.database().ref('messages');
+        
+        dbRef.current.limitToLast(50).on('value', (snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            const msgs = Object.entries(data).map(([key, val]) => ({
+              id: key,
+              ...val
+            }));
+            setMessages(msgs);
+          }
+        });
+      };
+      document.body.appendChild(dbScript);
+    };
+    document.body.appendChild(script);
+
+    return () => {
+      if (dbRef.current) {
+        dbRef.current.off();
+      }
+    };
+  }, []);
+
+  // Load voices
+  useEffect(() => {
+    const loadVoices = () => {
+      const availableVoices = speechSynthesis.getVoices();
+      setVoices(availableVoices);
+      if (availableVoices.length > 0 && !selectedVoice) {
+        setSelectedVoice(availableVoices[0].name);
+      }
+    };
+
+    loadVoices();
+    speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
+
+  // Auto-scroll
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // TTS function
+  const speak = (text, user) => {
+    if (!ttsEnabled || !text.trim()) return;
+
+    speechQueue.current.push({ text, user });
+    if (!isSpeaking.current) {
+      processQueue();
     }
-
-    h2 {
-      text-align: center;
-      margin: 10px 0;
-    }
-
-    #chat {
-      flex: 1;
-      padding: 10px;
-      overflow-y: auto;
-    }
-
-    .msg {
-      margin-bottom: 6px;
-      font-size: 15px;
-    }
-
-    #input {
-      display: flex;
-      border-top: 1px solid #333;
-    }
-
-    input {
-      flex: 1;
-      padding: 12px;
-      font-size: 16px;
-      border: none;
-      outline: none;
-    }
-
-    button {
-      padding: 12px 18px;
-      font-size: 16px;
-      background: #5865f2;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: #4752c4;
-    }
-  </style>
-</head>
-
-<body>
-  <h2>🔊 TTS Chat Room</h2>
-
-  <div id="chat"></div>
-
-  <div id="input">
-    <input id="text" placeholder="Type a message..." />
-    <button id="send">Send</button>
-  </div>
-
-<script type="module">
-  // 🔥 Firebase v9 imports
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-  import {
-    getDatabase,
-    ref,
-    push,
-    onChildAdded,
-    query,
-    limitToLast
-  } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
-
-  // 🔐 YOUR FIREBASE CONFIG (unchanged)
-  const firebaseConfig = {
-    apiKey: "AIzaSyCdlefibbnAvbdZ86lPJAdUtifGPP7uQTE",
-    authDomain: "tts-projet-fd867.firebaseapp.com",
-    databaseURL: "https://tts-projet-fd867-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "tts-projet-fd867",
-    storageBucket: "tts-projet-fd867.firebasestorage.app",
-    messagingSenderId: "412421975876",
-    appId: "1:412421975876:web:bae419fa68b429ba52f111"
   };
 
-  // 🚀 Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  const messagesRef = ref(db, "messages");
+  const processQueue = () => {
+    if (speechQueue.current.length === 0) {
+      isSpeaking.current = false;
+      return;
+    }
 
-  // 🔐 Require username
-  let username = "";
-  while (!username) {
-    username = prompt("Enter your name to join:");
-    if (username) username = username.trim();
-  }
+    isSpeaking.current = true;
+    const { text, user } = speechQueue.current.shift();
+    
+    const utterance = new SpeechSynthesisUtterance(`${user} says: ${text}`);
+    const voice = voices.find(v => v.name === selectedVoice);
+    if (voice) utterance.voice = voice;
+    utterance.rate = speed;
+    utterance.pitch = pitch;
+    utterance.volume = volume;
+    
+    utterance.onend = () => {
+      processQueue();
+    };
 
-  const input = document.getElementById("text");
-  const chat = document.getElementById("chat");
-  const sendBtn = document.getElementById("send");
+    speechSynthesis.speak(utterance);
+  };
 
-  // 🎙 Discord-style browser TTS
-  function speak(text) {
-    speechSynthesis.cancel();
-
-    const msg = new SpeechSynthesisUtterance(text);
-    msg.lang = "en-US";
-    msg.rate = 1.25;
-    msg.pitch = 1.0;
-    msg.volume = 1;
-
-    const voices = speechSynthesis.getVoices();
-    for (const v of voices) {
-      if (v.lang === "en-US") {
-        msg.voice = v;
-        break;
+  // Listen to new messages for TTS
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.username !== username && lastMsg.text) {
+        speak(lastMsg.text, lastMsg.username);
       }
     }
+  }, [messages]);
 
-    speechSynthesis.speak(msg);
+  const sendMessage = () => {
+    if (!input.trim() && !mediaPreview) return;
+
+    const msg = {
+      username,
+      text: input.trim(),
+      timestamp: Date.now(),
+      media: mediaPreview,
+      mediaType: mediaType
+    };
+
+    dbRef.current.push(msg);
+    setInput('');
+    setMediaPreview(null);
+    setMediaType(null);
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target.result;
+      if (file.type.startsWith('image/')) {
+        setMediaType('image');
+        setMediaPreview(result);
+      } else if (file.type.startsWith('video/')) {
+        setMediaType('video');
+        setMediaPreview(result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const copyCode = (code, id) => {
+    navigator.clipboard.writeText(code);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const renderMessage = (msg) => {
+    const isCode = msg.text?.startsWith('```') && msg.text?.endsWith('```');
+    const codeContent = isCode ? msg.text.slice(3, -3).trim() : '';
+    const codeLines = codeContent.split('\n');
+    const language = codeLines[0]?.trim() || 'text';
+    const code = codeLines.slice(1).join('\n');
+
+    return (
+      <div key={msg.id} className="mb-4 p-3 bg-gray-800 rounded-lg">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
+            {msg.username[0].toUpperCase()}
+          </div>
+          <span className="font-semibold text-gray-200">{msg.username}</span>
+          <span className="text-xs text-gray-500">
+            {new Date(msg.timestamp).toLocaleTimeString()}
+          </span>
+        </div>
+
+        {msg.media && msg.mediaType === 'image' && (
+          <img src={msg.media} alt="uploaded" className="max-w-md rounded-lg mb-2" />
+        )}
+
+        {msg.media && msg.mediaType === 'video' && (
+          <video src={msg.media} controls className="max-w-md rounded-lg mb-2" />
+        )}
+
+        {isCode ? (
+          <div className="relative bg-gray-900 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between bg-gray-950 px-4 py-2 border-b border-gray-700">
+              <span className="text-xs text-gray-400 font-mono">{language}</span>
+              <button
+                onClick={() => copyCode(code, msg.id)}
+                className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200"
+              >
+                {copiedId === msg.id ? <Check size={14} /> : <Copy size={14} />}
+                {copiedId === msg.id ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+            <pre className="p-4 overflow-x-auto">
+              <code className="text-sm text-gray-300 font-mono">{code}</code>
+            </pre>
+          </div>
+        ) : (
+          <p className="text-gray-300 whitespace-pre-wrap break-words">{msg.text}</p>
+        )}
+      </div>
+    );
+  };
+
+  if (!isUsernameSet) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center p-4">
+        <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl max-w-md w-full">
+          <h1 className="text-3xl font-bold text-white mb-6 text-center">Welcome to TTS Chat</h1>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && username.trim() && setIsUsernameSet(true)}
+            placeholder="Enter your username"
+            className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 mb-4"
+          />
+          <button
+            onClick={() => username.trim() && setIsUsernameSet(true)}
+            className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition"
+          >
+            Join Chat
+          </button>
+        </div>
+      </div>
+    );
   }
 
-  // 📤 Send message
-  function sendMessage() {
-    const text = input.value.trim();
-    if (!text) return;
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex flex-col">
+      {/* Header */}
+      <div className="bg-gray-800 shadow-lg p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Volume2 className="text-purple-400" size={28} />
+          <h1 className="text-2xl font-bold text-white">TTS Chat</h1>
+        </div>
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="p-2 hover:bg-gray-700 rounded-lg transition"
+        >
+          <Settings className="text-gray-300" size={24} />
+        </button>
+      </div>
 
-    push(messagesRef, {
-      user: username,
-      text: text
-    });
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="bg-gray-800 p-4 border-b border-gray-700">
+          <h3 className="text-white font-semibold mb-3">TTS Settings</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-gray-300 text-sm mb-1 block">Voice</label>
+              <select
+                value={selectedVoice}
+                onChange={(e) => setSelectedVoice(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                {voices.map((voice) => (
+                  <option key={voice.name} value={voice.name}>
+                    {voice.name} ({voice.lang})
+                  </option>
+                ))}
+              </select>
+            </div>
 
-    input.value = "";
-  }
+            <div>
+              <label className="text-gray-300 text-sm mb-1 block flex items-center justify-between">
+                Speed: {speed.toFixed(1)}x
+              </label>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={speed}
+                onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                className="w-full"
+              />
+            </div>
 
-  sendBtn.onclick = sendMessage;
+            <div>
+              <label className="text-gray-300 text-sm mb-1 block flex items-center justify-between">
+                Pitch: {pitch.toFixed(1)}
+              </label>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={pitch}
+                onChange={(e) => setPitch(parseFloat(e.target.value))}
+                className="w-full"
+              />
+            </div>
 
-  // ⌨️ Enter key support
-  input.addEventListener("keydown", e => {
-    if (e.key === "Enter") {
-      sendMessage();
-    }
-  });
+            <div>
+              <label className="text-gray-300 text-sm mb-1 block flex items-center justify-between">
+                Volume: {(volume * 100).toFixed(0)}%
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={volume}
+                onChange={(e) => setVolume(parseFloat(e.target.value))}
+                className="w-full"
+              />
+            </div>
+          </div>
 
-  // 📥 Receive messages
-  const messagesQuery = query(messagesRef, limitToLast(100));
-  onChildAdded(messagesQuery, snapshot => {
-    const data = snapshot.val();
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="tts-enabled"
+              checked={ttsEnabled}
+              onChange={(e) => setTtsEnabled(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <label htmlFor="tts-enabled" className="text-gray-300 text-sm">
+              Enable Text-to-Speech
+            </label>
+          </div>
+        </div>
+      )}
 
-    const div = document.createElement("div");
-    div.className = "msg";
-    div.textContent = `${data.user}: ${data.text}`;
-    chat.appendChild(div);
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="max-w-4xl mx-auto">
+          {messages.map(renderMessage)}
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
 
-    chat.scrollTop = chat.scrollHeight;
-    speak(data.text);
-  });
-</script>
-</body>
-</html>
+      {/* Media Preview */}
+      {mediaPreview && (
+        <div className="bg-gray-800 p-4 border-t border-gray-700">
+          <div className="max-w-4xl mx-auto flex items-center gap-4">
+            {mediaType === 'image' && (
+              <img src={mediaPreview} alt="preview" className="h-20 rounded" />
+            )}
+            {mediaType === 'video' && (
+              <video src={mediaPreview} className="h-20 rounded" />
+            )}
+            <button
+              onClick={() => {
+                setMediaPreview(null);
+                setMediaType(null);
+              }}
+              className="text-red-400 hover:text-red-300"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="bg-gray-800 p-4 border-t border-gray-700">
+        <div className="max-w-4xl mx-auto flex items-center gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            accept="image/*,video/*"
+            className="hidden"
+          />
+          
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-3 hover:bg-gray-700 rounded-lg transition"
+            title="Upload media"
+          >
+            <Image className="text-gray-400" size={20} />
+          </button>
+
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+            placeholder="Type a message... (Use ```language for code blocks)"
+            className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+
+          <button
+            onClick={sendMessage}
+            className="p-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 rounded-lg transition"
+          >
+            <Send className="text-white" size={20} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
