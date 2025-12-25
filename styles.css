@@ -198,11 +198,13 @@ body {
     cursor: pointer;
 }
 
-/* Messages container */
+/* Messages container - INDEPENDENT SCROLLING */
 .messages-container {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 1rem;
+    min-height: 0; /* Important for flex scrolling */
 }
 
 .messages-wrapper {
@@ -367,11 +369,13 @@ body {
     color: #dc2626;
 }
 
-/* Input area */
+/* Input area - FIXED AT BOTTOM */
 .input-area {
     background: rgba(31, 41, 55, 0.95);
     padding: 1rem;
     border-top: 1px solid rgba(55, 65, 81, 0.8);
+    position: sticky;
+    bottom: 0;
 }
 
 .input-wrapper {
