@@ -9,6 +9,7 @@ let state = {
     input: '',
     showSettings: false,
     ttsEnabled: true,
+    hearMyself: false, // NEW: Option to hear own messages
     selectedVoice: '',
     voices: [],
     speed: 1,
@@ -76,14 +77,14 @@ db.limitToLast(50).on('value', (snapshot) => {
         // Check for new messages to speak
         if (state.messages.length > 0 && msgs.length > state.messages.length) {
             const newMsg = msgs[msgs.length - 1];
-            if (newMsg.username !== state.username && newMsg.text) {
+            // Speak if: it's not my message OR I have "hear myself" enabled
+            if (newMsg.text && (newMsg.username !== state.username || state.hearMyself)) {
                 speak(newMsg.text, newMsg.username);
             }
         }
         
         state.messages = msgs;
         render();
-        scrollToBottom();
     }
 });
 
@@ -303,6 +304,11 @@ function renderChatScreen() {
                                ${state.ttsEnabled ? 'checked' : ''}>
                         <label for="tts-enabled" class="setting-checkbox-label">Enable Text-to-Speech</label>
                     </div>
+                    <div class="setting-checkbox-wrapper">
+                        <input type="checkbox" id="hear-myself" class="setting-checkbox" 
+                               ${state.hearMyself ? 'checked' : ''}>
+                        <label for="hear-myself" class="setting-checkbox-label">Hear My Own Messages</label>
+                    </div>
                 </div>
             ` : ''}
 
@@ -433,6 +439,13 @@ function render() {
         if (ttsCheckbox) {
             ttsCheckbox.onchange = (e) => {
                 state.ttsEnabled = e.target.checked;
+            };
+        }
+
+        const hearMyselfCheckbox = document.getElementById('hear-myself');
+        if (hearMyselfCheckbox) {
+            hearMyselfCheckbox.onchange = (e) => {
+                state.hearMyself = e.target.checked;
             };
         }
     }
